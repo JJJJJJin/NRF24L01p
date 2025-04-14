@@ -1,6 +1,9 @@
 #ifndef NRF_TEST_H
 #define NRF_TEST_H
 
-void decomponent(uint8_t*, uint64_t, uint8_t*);
+#include "nrf24l01p.h"
+#include "nrf_ptx.h"
+#include "nrf_prx.h"
+#include "nrf_debug.h"
 
 #endif

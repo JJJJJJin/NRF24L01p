@@ -8,5 +8,7 @@
 #include "nrf_test.h"
 #include "prx_pinout.h"
 
+void nrf_prx_setup();
+
 #endif
 

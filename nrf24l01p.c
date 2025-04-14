@@ -200,12 +200,14 @@ void nrf24l01p_write_pipeaddr_5_byte(uint8_t reg, uint8_t* addr){
  */
 void nrf24l01p_read_rx_payload(uint8_t pipeline_number, uint8_t* buffer){
   uint8_t length[2];
-  nrf24l01p_read_register(pipeline_number, length, sizeof(length));
+  // read RX_PW_Px to ensure the static length
+  nrf24l01p_read_register(pipeline_number, length, sizeof(length)); 
   
   buffer[0] = NRF24L01P_R_RX_PAYLOAD;
   // read payload
   digitalWrite(CSN_PIN, LOW);
-  wiringPiSPIDataRW(SPI_ID, (char*) buffer, length[1]);
+  // has to be one more than the package lenth, since the status takes one byte
+  wiringPiSPIDataRW(SPI_ID, (char*) buffer, (length[1]+1));
   digitalWrite(CSN_PIN, HIGH);
 }
 

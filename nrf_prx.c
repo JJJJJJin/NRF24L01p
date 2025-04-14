@@ -18,8 +18,7 @@
 #include "nrf_prx.h"
 
 #define NRF_PRX_PIPELINE_0 {0xE7, 0xD3, 0xF0, 0x35, 0x77}
-//#define RX_PW 32 // set up the length of pipeline to be 32byte
-#define NRF_PRX_RX_PW 8 // for testing purpose
+#define NRF_PRX_RX_PW 32 // set up the length of pipeline to be 32byte
 
 void nrf_prx_setup(){
   nrf24l01p_spi_init(SPI_ID, SPEED);
@@ -28,14 +27,14 @@ void nrf_prx_setup(){
   digitalWrite(CE_PIN, LOW);
   
   // Set register CONFIG with PWR_UP=1, PRIM_RX=1
-  nrf24l01p_write_register(NRF24L01P_CONFIG, 0b00000011);
+  nrf24l01p_write_register(NRF24L01P_CONFIG, 0b00001011);
   nrf24l01p_write_register(NRF24L01P_EN_AA, 0b00000000);
-  nrf24l01p_write_register(NRF24L01P_EN_RXADDR, 0b00000001);
+  nrf24l01p_write_register(NRF24L01P_EN_RXADDR, 0b00000011);
   nrf24l01p_write_register(NRF24L01P_SETUP_AW, 0b00000011);
-  nrf24l01p_write_register(NRF24L01P_SETUP_RETR, 0b00000000);
+  nrf24l01p_write_register(NRF24L01P_SETUP_RETR, 0b00000011);
   // F0 = 2400 + RF_CH[MHz], 2.4GHz <= F0 <= 2.525GHz
-  nrf24l01p_write_register(NRF24L01P_RF_CH, 100);
-  nrf24l01p_write_register(NRF24L01P_RF_SETUP, 0b00100110);
+  nrf24l01p_write_register(NRF24L01P_RF_CH, 120);
+  nrf24l01p_write_register(NRF24L01P_RF_SETUP, 0b00001110);
   
   // set up 5-byte pipeline addr
   uint8_t addr[5] = NRF_PRX_PIPELINE_0;
@@ -48,36 +47,32 @@ void nrf_prx_setup(){
   nrf24l01p_write_register(NRF24L01P_STATUS, 0b01110000);
 }
 
+int count = 0;
 
 void nrf_prx_data_handler(uint8_t* data, int size){
 
   uint8_t info[size];
-  nrf24l01p_security_decrypt(data, info);
 
-  /* Processing Data Information */
-  /* Code Example */
-  /* Delete code below before implementation */
+  // retrieve sequence number
+  uint16_t seq = ((uint16_t) data[1]) << 8 | (uint16_t) data[2];
   
-  uint64_t seq;
-  uint8_t d[8];
-  
-  decomponent(data, seq, d);
-  
-  printf("***Message: ");
-  printf("%ld", seq);
-  for(int i=1; i<8; i++){
-    printf("%c", d[i]);
+  printf("***count: %d\tSeq %d\tMessage:", count++, seq);
+  // ignore the first 2 bytes
+  for(int i=3; i<size; i++){
+    printf("%c", data[i]);
   }
   printf("\n");
 
 }
 
 void callback(){
-  uint8_t data[NRF_PRX_RX_PW+1];
+  // uint8_t data[NRF_PRX_RX_PW+1];
+  uint8_t data[100];
   //read payload from pipeline 0
-  nrf24l01p_read_rx_payload(NRF24L01P_RX_PW_P0, data);
+  nrf24l01p_read_rx_payload((NRF24L01P_RX_PW_P0), data);
   
-  nrf_prx_data_handler(data, sizeof(data));
+  // nrf_prx_data_handler(data, sizeof(data));
+  nrf_prx_data_handler(data, NRF_PRX_RX_PW);
 
   // clear IRQ and flush RX FIFO
   nrf24l01p_flush_rx();
@@ -91,9 +86,11 @@ void nrf_prx_listen(){
   while(TRUE){}
 }
 
+/*
 int main(){
   nrf_prx_setup();
-  nrf_debug_print_all_reg();
-  //nrf_prx_listen();
+  // nrf_debug_print_all_reg();
+  nrf_prx_listen();
   return 0;
 }
+*/

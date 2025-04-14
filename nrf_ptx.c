@@ -22,7 +22,7 @@
 #define NRF_PTX_PIPELINE_0 {0xE7, 0xD3, 0xF0, 0x35, 0x77}
 
 // Must be equal to PRX's PW
-#define NRF_PTX_TX_PW 8
+#define NRF_PTX_TX_PW 32
 
 void nrf_ptx_setup(){
   nrf24l01p_spi_init(SPI_ID, SPEED);
@@ -52,60 +52,56 @@ void nrf_ptx_setup(){
   nrf24l01p_write_register(NRF24L01P_STATUS, 0b01110000);
 }
 
-void nrf_ptx_data_handler(uint8_t* msg, uint8_t* data, int size){
-  if(size > NRF_PTX_TX_PW){
-    fprintf(stderr, "NRF_PTX: invalid length of data\n");
-    exit(1);
-  }
-  
-  uint8_t info[NRF_PTX_TX_PW]; // use this for padding and then encryption and finally copy mem to msg
-  
-  /* Auto Padding Information for Security Purpose */
-  /* Delete This Part if Necessary */
-  for(int i=0; i<NRF_PTX_TX_PW; i++){
-    if(i<size){
-      msg[i] = data[i];
-    }else{
-      msg[i] = '@'; // use '@' for padding
-    }
-  }
-  /* Auto Padding Ends */
-  
-  nrf24l01p_security_encrypt(info, msg);
-}
 
 void nrf_ptx_send(uint8_t* data, int size){
   char msg[NRF_PTX_TX_PW];
-  nrf_ptx_data_handler(msg, data, size);
   
   if(!digitalRead(IRQ_PIN)){
     nrf24l01p_flush_tx();
     nrf24l01p_write_register(NRF24L01P_STATUS, 0b00100000);
   }
-  printf("Sending: %s\n", msg);
-  nrf24l01p_write_tx_payload((uint8_t*) msg, (uint8_t) sizeof(msg));
+
+  printf("message: %s\n", (char*) data);
+  nrf24l01p_write_tx_payload(data, size);
   
   // send data
   digitalWrite(CE_PIN, HIGH);
-  sleep(0.0002); // 20us
+  sleep(0.00001); // 10us
   digitalWrite(CE_PIN, LOW);
 
 }
   
-
+/*
 int main(){
   nrf_ptx_setup();
   
-  char data[7] = "abbcccd";
-  
-  // for testing purpose
-  nrf_debug_print_all_reg();
-  
-  // DONT execute sending loop, only for testing config
-  while(0){
-    nrf_ptx_send(data, sizeof(data));
+  uint8_t data[32] = "aaaaaaaabbbbbbbbccccccccdddddddd";  // payload
+  uint16_t seq = 0;
+  while(seq < 0x00ff){
+      // add seq to data, taking data[0] and data[1]
+      uint16_t seq_tmp = seq;
+      data[0] = (uint8_t) (seq_tmp >> 8);
+      seq_tmp = seq;
+      data[1] = (uint8_t) seq_tmp;
+
+      printf("data0: %u", data[0]);
+      printf("\tdata1: %u\n", data[1]);
+
+      nrf_ptx_send(data, sizeof(data));
+      sleep(0.01);
+      seq ++;
   }
 
+  
+  // for testing purpose
+  // nrf_debug_print_all_reg();
+  
+  // // DONT execute sending loop, only for testing config
+  // while(1){
+  //   nrf_ptx_send(data, sizeof(data));
+  //   sleep(0.01);
+  // }
 
   return 0;
 }
+*/
