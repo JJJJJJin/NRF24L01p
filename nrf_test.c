@@ -1,3 +1,19 @@
+/**
+ * @file nrf_test.c
+ * @brief Integration test for the nRF24L01+ driver.
+ *
+ * PRX test: listens for packets and reports receive rate and payload
+ * correctness against a known reference payload.
+ *
+ * PTX test: not yet implemented.
+ *
+ * Build flags:
+ *   PRX binary  -> -DPRX=1 -DNRF_TEST_PRX=1
+ *   PTX binary  -> (no additional flags)
+ *
+ * See the Makefile for the recommended build commands.
+ */
+
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -7,121 +23,113 @@
 #include <wiringPi.h>
 #include <wiringPiSPI.h>
 
+#include "nrf_config.h"
 #include "nrf_test.h"
 
 #ifndef NRF_TEST_PRX
 #define NRF_TEST_PRX 0
 #endif
 
-#define NRF_PRX_RX_PW 32
-#define NRF_TEST_TOTAL_DATA_NUM 0xffff
+/* Total number of packets expected from the PTX transmit sequence */
+#define NRF_TEST_TOTAL_PACKETS  0xFFFFu
 
+/* Reference payload content used by the PTX (bytes 2 onward) */
+static const uint8_t REFERENCE_PAYLOAD[NRF_PAYLOAD_WIDTH] =
+    "aaaaaaaabbbbbbbbccccccccdddddddd";
 
-void byte2bin(uint8_t num) {
-    for (int i = sizeof(uint8_t) * 8 - 1; i >= 0; i--) {
-        printf("%d", (num >> i) & 1);
+/* --------------------------------------------------------------------------
+ * PRX test state (updated from ISR context)
+ * -------------------------------------------------------------------------- */
+static volatile int g_packets_received  = 0;
+static volatile int g_packets_valid     = 0;
+static volatile int g_packets_corrupted = 0;
+
+/* --------------------------------------------------------------------------
+ * PRX ISR
+ * -------------------------------------------------------------------------- */
+
+static void test_prx_callback(void)
+{
+    uint8_t data[NRF_PAYLOAD_WIDTH + 1u];
+    nrf24l01p_read_rx_payload(NRF24L01P_RX_PW_P0, data);
+
+    /* data[0] = STATUS, data[1..2] = sequence number (big-endian uint16) */
+    uint16_t seq = ((uint16_t)data[1] << 8) | (uint16_t)data[2];
+
+    g_packets_received++;
+
+    /* Validate payload content (skip STATUS byte and 2-byte sequence field) */
+    uint8_t rx_payload[NRF_PAYLOAD_WIDTH - 2u];
+    memcpy(rx_payload, data + 3, sizeof(rx_payload));
+
+    uint8_t ref_payload[NRF_PAYLOAD_WIDTH - 2u];
+    memcpy(ref_payload, REFERENCE_PAYLOAD + 2, sizeof(ref_payload));
+
+    if (memcmp(ref_payload, rx_payload, sizeof(ref_payload)) != 0) {
+        fprintf(stderr,
+                "payload corruption detected: seq=%u expected=\"%.*s\" received=\"%.*s\"\n",
+                (unsigned int)seq,
+                (int)sizeof(ref_payload), ref_payload,
+                (int)sizeof(rx_payload),  rx_payload);
+        g_packets_corrupted++;
+    } else {
+        g_packets_valid++;
+    }
+
+    nrf24l01p_flush_rx();
+    nrf24l01p_write_register(NRF24L01P_STATUS, NRF24L01P_STATUS_RX_DR);
+}
+
+static void test_prx_print_stats(void)
+{
+    int received  = g_packets_received;
+    int valid     = g_packets_valid;
+    int corrupted = g_packets_corrupted;
+
+    printf("packets received  : %d / %u\n", received,  NRF_TEST_TOTAL_PACKETS);
+    printf("packets valid     : %d\n", valid);
+    printf("packets corrupted : %d\n", corrupted);
+    if (received > 0) {
+        printf("correctness rate  : %.6f\n", (double)valid     / received);
+        printf("receive rate      : %.6f\n", (double)received  / NRF_TEST_TOTAL_PACKETS);
+    }
+    printf("---\n");
+}
+
+static void test_prx_listen(void)
+{
+    wiringPiISR(IRQ_PIN, INT_EDGE_FALLING, &test_prx_callback);
+    digitalWrite(CE_PIN, HIGH);
+
+    while (true) {
+        sleep(5);
+        test_prx_print_stats();
     }
 }
 
-int DR_num = 0; // data received number
-int DR_valid_num = 0;
-int DR_corrupted_num = 0;
-int pre_seq = 0;
-uint8_t payload[NRF_PRX_RX_PW] = "aaaaaaaabbbbbbbbccccccccdddddddd";
+/* --------------------------------------------------------------------------
+ * Test entry points
+ * -------------------------------------------------------------------------- */
 
-void test_prx_callback(){
-  uint8_t data[NRF_PRX_RX_PW+1];
-  nrf24l01p_read_rx_payload((NRF24L01P_RX_PW_P0), data);
-  DR_num++;
-
-  printf("Shoud have %d, Data Received: %d\n",0xffff, DR_num);
-
-  uint16_t seq = 0;
-  seq = ((uint16_t) data[1]) << 8 | (uint16_t) data[2];
-
-  // perfrom data validation and loss rate calculation
-  // seq validataion
-  /*
-  if(seq != pre_seq+1){
-    printf("Sequence missing, should receive %d but receive %d\n", pre_seq+1, seq);
-  }
-  pre_seq = seq;
-  */
-
-  // payload validation
-  uint8_t tmp1[NRF_PRX_RX_PW-1];
-  strncpy(tmp1, payload+2, sizeof(tmp1)-1);
-  tmp1[NRF_PRX_RX_PW-2] = '\0';
-  uint8_t tmp2[NRF_PRX_RX_PW-1];
-  strncpy(tmp2, data+3, sizeof(tmp1)-1);
-  tmp2[NRF_PRX_RX_PW-2] = '\0';
-  if(strcmp(tmp1, tmp2) != 0){
-    printf("Payload corrupted detected\n");
-    printf("Should have %s        \n", tmp1);
-    printf("But had     %s        \n", tmp2);
-    DR_corrupted_num++;
-  }else{
-    DR_valid_num++;
-  }
-
-  // receive rate
-  printf(" ");
-  //printf("\rTotal Data Num:        %d             \n", seq);
-  printf("\rData Received:         %d             \n", DR_num);
-  printf("\rValid Data:            %d             \n", DR_valid_num);
-  //printf("\rLost Data:             %d             \n", seq - DR_num);
-  printf("\rCorrupted Data:        %d             \n", DR_corrupted_num);
-  printf("\r==========                            \n");
-  // correctness of data payload OR 1 - corruption rate
-  printf("\rCorrectness Rate:      %.8f           \n", (double)DR_valid_num/DR_num);
-  // recieved / num_should_received OR 1 - loss rate
-  printf("\rReceived Rate:         %.8f           \n", (double) DR_num/0xffff);
-  printf("\033[6A");
-
-
-  // printf("seq: %d: ", seq);
-  // // ignore the first 2 bytes
-  // for(int i=3; i<sizeof(data); i++){
-  //   printf("%c", data[i]);
-  // }
-  // printf("\n");
-
-  nrf24l01p_flush_rx();
-  nrf24l01p_write_register(NRF24L01P_STATUS, 0b01000000);
+static int test_prx(void)
+{
+    nrf_prx_setup();
+    test_prx_listen();
+    return 0;
 }
 
-void test_prx_listen(){
-  wiringPiISR(IRQ_PIN, INT_EDGE_FALLING, &test_prx_callback);
-  digitalWrite(CE_PIN, HIGH);
-  
-  while(TRUE){}
+static int test_ptx(void)
+{
+    /* PTX integration test is not yet implemented */
+    fprintf(stderr, "nrf_test: PTX test is not implemented\n");
+    return 1;
 }
 
-/* Testing code of PTX */
-/* Test ptx by sending sequence number with data payload, which shares identical content with PRX for evaluating the data reeive/loss rate */
-/* Not implemented yet*/
-int test_ptx(){
-  return 0;
-}
-
-/* Testing code of PRX */
-/* Test prx by evaluating the received data payload and calculate the data receive/loss rate */
-int test_prx(){
-  nrf_prx_setup();
-  test_prx_listen();
-
-  return 0;
-}
-
-
-
-int main(){
-  if(NRF_TEST_PRX){
-    test_prx();
-  }else{
-    test_ptx();
-  }
-  
-  
-  return 0;
+int main(void)
+{
+    if (NRF_TEST_PRX) {
+        return test_prx();
+    } else {
+        return test_ptx();
+    }
 }

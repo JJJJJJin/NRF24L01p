@@ -1,67 +1,27 @@
+/**
+ * @file ptx_pinout.h
+ * @brief GPIO and SPI pin assignments for the PTX (Primary Transmitter) role.
+ *
+ * All pin numbers use the BCM (Broadcom) numbering scheme as required by
+ * wiringPiSetupGpio().  Adjust to match your wiring before building.
+ */
+
 #ifndef PTX_PINOUT_H
 #define PTX_PINOUT_H
 
+/* SPI peripheral index: 0 = /dev/spidev0.x, 1 = /dev/spidev1.x */
+#define SPI_ID   0
 
-#ifdef SPI_ID
-#undef SPI_ID
-#endif
-/* Set up SPI channel */
-#define SPI_ID 0
+/* SPI clock frequency in Hz */
+#define SPEED    1000000
 
-#ifdef SPEED
-#undef SPEED
-#endif
-/* Set up SPI speed */
-#define SPEED 1000000
-
-#ifdef IRQ_PIN
-#undef IRQ_PIN
-#endif
-/* Set up IRQ_PIN */
+/* BCM pin connected to the module IRQ line (active-low, input) */
 #define IRQ_PIN  4
-#ifdef CE_PIN
-#undef CE_PIN
-#endif
-/* Set up CE_PIN */
-#define CE_PIN 22
 
-#ifdef CSN_PIN
-#undef CSN_PIN
-#endif
-/* Set up CSN_PIN */
-#define CSN_PIN 27
+/* BCM pin connected to the module CE (Chip Enable) line (output) */
+#define CE_PIN   22
 
-#endif
+/* BCM pin connected to the module CSN (Chip Select, active-low) (output) */
+#define CSN_PIN  27
 
-
-// #ifdef SPI_ID
-// #undef SPI_ID
-// #endif
-// /* Set up SPI channel */
-// #define SPI_ID 1 // use spi1 for ptx
-
-// #ifdef SPEED
-// #undef SPEED
-// #endif
-// /* Set up SPI speed */
-// #define SPEED 1000000
-
-// #ifdef IRQ_PIN
-// #undef IRQ_PIN
-// #endif
-// /* Set up IRQ_PIN */
-// #define IRQ_PIN  6
-
-// #ifdef CE_PIN
-// #undef CE_PIN
-// #endif
-// /* Set up CE_PIN */
-// #define CE_PIN 26
-
-// #ifdef CSN_PIN
-// #undef CSN_PIN
-// #endif
-// /* Set up CSN_PIN */
-// #define CSN_PIN 13
-
-// #endif
+#endif /* PTX_PINOUT_H */
